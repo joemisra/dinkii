@@ -220,8 +220,15 @@ void setup()
   {
     trellis.setPixelColor(i, Wheel(map(i, 0, NUM_COLS * NUM_ROWS, 0, 255))); // addressed with keynum
     trellis.show();
-    delay(5);
+    // delay(1);
+    delayMicroseconds(2000);
   }
+
+  // Set initial RGB color (white)
+  mdp.setRgbColor(255, 255, 255);
+
+  // Set initial brightness
+  mdp.setBrightness(BRIGHTNESS);
 }
 
 // ***************************************************************************
@@ -234,16 +241,23 @@ void sendLeds()
   uint32_t hexColor;
   bool isDirty = false;
 
+  // Get RGB values from the monome device
+  uint8_t R_value = mdp.getRed();
+  uint8_t G_value = mdp.getGreen();
+  uint8_t B_value = mdp.getBlue();
+
   for (int i = 0; i < NUM_ROWS * NUM_COLS; i++)
   {
     value = mdp.leds[i];
     prevValue = prevLedBuffer[i];
-    uint8_t gvalue = gammaTable[value] * gammaAdj;
+    uint8_t gvalue = gammaTable[value] * gammaAdj; // Apply gamma correction
 
     if (value != prevValue)
     {
-      // hexColor = (((R * value) >> 4) << 16) + (((G * value) >> 4) << 8) + ((B * value) >> 4);
-      hexColor = (((gvalue * R) / 256) << 16) + (((gvalue * G) / 256) << 8) + (((gvalue * B) / 256) << 0);
+      // Use the RGB values from the MonomeSerialDevice
+      hexColor = (((gvalue * R_value) / 256) << 16) +
+                 (((gvalue * G_value) / 256) << 8) +
+                 (((gvalue * B_value) / 256) << 0);
       trellis.setPixelColor(i, hexColor);
 
       prevLedBuffer[i] = value;
@@ -252,6 +266,14 @@ void sendLeds()
   }
   if (isDirty)
   {
+    // Set the global brightness
+    for (int x = 0; x < NUM_COLS / 4; x++)
+    {
+      for (int y = 0; y < NUM_ROWS / 4; y++)
+      {
+        trellis_array[y][x].pixels.setBrightness(mdp.getBrightness());
+      }
+    }
     trellis.show();
   }
 }
