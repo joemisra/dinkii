@@ -287,10 +287,17 @@ void loop()
 
   mdp.poll(); // process incoming serial from Monomes
 
-  // refresh every 16ms or so
-  if (isInited && monomeRefresh > 16)
+  // Read key presses more frequently (every 8ms)
+  static elapsedMillis keyPolling;
+  if (isInited && keyPolling > 8)
   {
     trellis.read();
+    keyPolling = 0;
+  }
+
+  // Update LEDs less frequently to avoid too much I2C traffic
+  if (isInited && monomeRefresh > 16)
+  {
     sendLeds();
     monomeRefresh = 0;
   }
