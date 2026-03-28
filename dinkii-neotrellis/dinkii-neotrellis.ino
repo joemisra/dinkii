@@ -38,6 +38,8 @@
 
 #include "config.h" // look here to change settings for different boards
 
+#include "usb_drive.h" // USB mass storage drive for CONFIG.TXT
+
 #include <Adafruit_Sensor.h>
 #include <Adafruit_ADXL343.h>
 Adafruit_ADXL343 accel = Adafruit_ADXL343(12345, &MYWIRE);
@@ -112,15 +114,13 @@ TrellisCallback keyCallback(keyEvent evt){
   uint8_t y = evt.bit.NUM / NUM_COLS; 
 
   if(evt.bit.EDGE == SEESAW_KEYPAD_EDGE_RISING){
-//     Serial.println(" pressed ");
-    mdp.sendGridKey(x, y, 1);
+    mdp.sendGridKey(x, y + rowStart, 1);
     #if TEST
       trellis.setPixelColor(evt.bit.NUM, Wheel(map(evt.bit.NUM, 0, NUM_ROWS, 0, 255))); //on rising
       trellis.show();
     #endif
   }else if(evt.bit.EDGE == SEESAW_KEYPAD_EDGE_FALLING){
-//     Serial.println(" released ");
-    mdp.sendGridKey(x, y, 0);
+    mdp.sendGridKey(x, y + rowStart, 0);
     #if TEST
       trellis.setPixelColor(evt.bit.NUM, 0); //off falling
       trellis.show();
@@ -140,6 +140,8 @@ String serialNumberTwo;
 
 void setup(){
 	uint8_t x, y;
+
+	usbDriveSetup(); // init USB drive + load CONFIG.TXT (before USB descriptors)
 
 	TinyUSBDevice.setManufacturerDescriptor(mfgstr);
 	TinyUSBDevice.setProductDescriptor(prodstr);
@@ -170,7 +172,7 @@ void setup(){
 
 	mdp.isMonome = true;
 	mdp.deviceID = deviceID;
-	mdp.setupAsGrid(NUM_ROWS, NUM_COLS);
+	mdp.setupAsGrid(NUM_ROWS + rowStart, NUM_COLS);
   	monomeRefresh = 0;
   	isInited = true;
 
@@ -215,7 +217,7 @@ void setup(){
 	// set overall brightness for all pixels
 	for (x = 0; x < NUM_COLS / 4; x++) {
 		for (y = 0; y < NUM_ROWS / 4; y++) {
-		  trellis_array[y][x].pixels.setBrightness(BRIGHTNESS);
+		  trellis_array[y][x].pixels.setBrightness(ledBrightness);
 		}
 	}
 
@@ -249,15 +251,15 @@ void sendLeds(){
   uint8_t value, prevValue = 0;
   uint32_t hexColor;
   bool isDirty = false;
+  int ledOffset = rowStart * NUM_COLS;
   
   for(int i=0; i< NUM_ROWS * NUM_COLS; i++){
-    value = mdp.leds[i];
+    value = mdp.leds[i + ledOffset];
     prevValue = prevLedBuffer[i];
-    uint8_t gvalue = gammaTable[value] * gammaAdj;
+    uint8_t gvalue = gammaTable[value] * ledGammaAdj;
     
     if (value != prevValue) {
-      //hexColor = (((R * value) >> 4) << 16) + (((G * value) >> 4) << 8) + ((B * value) >> 4); 
-      hexColor =  (((gvalue*R)/256) << 16) + (((gvalue*G)/256) << 8) + (((gvalue*B)/256) << 0);
+      hexColor =  (((gvalue*ledR)/256) << 16) + (((gvalue*ledG)/256) << 8) + (((gvalue*ledB)/256) << 0);
       trellis.setPixelColor(i, hexColor);
 
       prevLedBuffer[i] = value;
@@ -275,6 +277,16 @@ void sendLeds(){
 // ***************************************************************************
 
 void loop() {
+    // Hot-reload config if host PC edited files on the drive
+    if (usbDriveChanged()) {
+        usbDriveReloadConfig();
+        for (uint8_t cx = 0; cx < NUM_COLS / 4; cx++) {
+            for (uint8_t cy = 0; cy < NUM_ROWS / 4; cy++) {
+                trellis_array[cy][cx].pixels.setBrightness(ledBrightness);
+            }
+        }
+        memset(prevLedBuffer, 0, sizeof(prevLedBuffer));
+    }
 
     sensors_event_t event;
     accel.getEvent(&event);
