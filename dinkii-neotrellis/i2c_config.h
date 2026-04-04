@@ -9,11 +9,13 @@
 #define KB2040QT 2
 #define FEATHER2040QT 3
 #define DINKII 4
+#define FRUITJAM 5
 
 
 // DEFINE WHAT BOARD YOU ARE USING
-// PICO OR KB2040QT or FEATHER2040QT
+// PICO OR KB2040QT or FEATHER2040QT or FRUITJAM
 // if using feather, change platformio.ini board to use `adafruit_feather`
+// if using fruit jam, change platformio.ini board to use `adafruit_fruit_jam`
 #ifndef BOARDTYPE
 #define BOARDTYPE DINKII
 #endif
@@ -59,6 +61,13 @@ const uint8_t addrRowTwo[4] = {0x33,0x31,0x3E,0x36};
   #define MYWIRE Wire
   #define I2C_SDA 2
   #define I2C_SCL 3
+#endif
+
+// Adafruit Fruit Jam RP2350 - STEMMA-QT uses 20/21 and Wire
+#if BOARDTYPE == FRUITJAM
+  #define MYWIRE Wire
+  #define I2C_SDA 20
+  #define I2C_SCL 21
 #endif
 
 // DEFAULT FOR PICO
