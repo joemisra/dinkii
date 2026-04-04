@@ -2,6 +2,8 @@
 
 dink-ii is an RP2040 based microcontroller designed for plug-n-play use with STEMMA-QT compatible i2c devices.
 
+This firmware also supports the **Adafruit Fruit Jam** (RP2350) as a host board via its STEMMA-QT port.
+
 IMPORTANT - by default dink-ii sends 5v over the STEMMA-QT connector. If you need 3.3v for your device, see the jumper section below. (Note - NeoTrellis and MechaTrellis want 5v)
 
 ## Hardware
@@ -14,6 +16,10 @@ Requires a JST-PH to JST-SH (same side) connector cable.
 
 Requires a JST-SH to JST-SH (opposite side) connector cable.
 
+### Adafruit Fruit Jam
+
+Connect a NeoTrellis/MechaTrellis grid to the Fruit Jam's STEMMA-QT port using a JST-SH to JST-SH cable. The STEMMA-QT port uses I2C0 on GPIO20 (SDA) and GPIO21 (SCL).
+
 ### 5v jumper
 
 NeoTrellis and MechaTrellis use 5v so the STEMMA-QT connector defaults to 5v. If you need  3.3v instead for some other project, there is a 3-way jumper on the bottom of the board. For 3.3v, cut the trace between the center pad and the 5v pad, and then re-solder a bridge from the center pad to the 3.3v pad.
@@ -25,17 +31,32 @@ dink-ii boards ship with monome grid firmware installed in test mode (see board 
 
 ### How to program/flash the board:
 
+#### dink-ii (RP2040)
+
 > To enter the bootloader, hold down the BOOTSEL button, and while continuing to hold it (don't let go!), press and release the reset button. Continue to hold the BOOTSEL button until the RPI-RP2 drive appears. Alternately you can hold the BOOTSEL button down while you plug the USB cable into your computer.
 
 > Once the RPI-RP2 drive shows up, your board is in bootloader mode. Then make sure you are no longer holding down any buttons (RST or BOOTSEL button).
 
 > Drag the appropriate UF2 file to the RPI-RP2 drive. The device will reset and should then function as expected.
 
+#### Adafruit Fruit Jam (RP2350)
+
+> Hold down the BOOTSEL button while pressing reset (or while plugging in USB). A `RP2350` drive will appear. Drag the Fruit Jam UF2 file to this drive.
+
 For general programming using Arduino see the [Adafruit Guide for RP2040](https://learn.adafruit.com/adafruit-feather-rp2040-pico/arduino-ide-setup)
 
 ### PlatformIO / VSCode  
 
 The repo includes a PlatformIO configuration file and should work out of the box with VSCode.  
+
+Two build environments are available:
+- **`env:pico`** – for dink-ii and other RP2040 boards (default)
+- **`env:fruitjam`** – for the Adafruit Fruit Jam (RP2350)
+
+To build for the Fruit Jam, select the `env:fruitjam` environment in PlatformIO, or build from the command line:
+```
+pio run -e fruitjam
+```
 
 You may need to install some items if you've never used PlatformIO.  
 
@@ -72,8 +93,18 @@ For an 8x8 gird, use a `GRIDCOUNT` value of `SIXTYFOUR`, for a 16x8 grid, use `O
 
 ### i2c_config
 
-See the `i2c_config.h` file to change your board addresses based on your grid size.
-You will need to uncomment/comment the appropriate lines here for your grid size.
+See the `i2c_config.h` file to change your board type and addresses based on your grid size.
+
+The following board types are supported:
+- `DINKII` (default) – dink-ii RP2040
+- `PICO` – Raspberry Pi Pico
+- `KB2040QT` – KeeBoar KB2040
+- `FEATHER2040QT` – Adafruit Feather RP2040
+- `FRUITJAM` – Adafruit Fruit Jam RP2350
+
+When building with PlatformIO, the board type is set automatically via build flags for each environment. If editing `i2c_config.h` directly, change the `BOARDTYPE` define.
+
+You will need to uncomment/comment the appropriate address lines for your grid size.
 
 ```
 // SET YOUR ADDRESSES 

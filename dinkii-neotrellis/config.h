@@ -34,7 +34,11 @@
 
 #define INT_PIN 9
 // #define LED_PIN 13 // teensy LED used to show boot info
-#define LED_PIN 16 // dinkii LED1
+#if BOARDTYPE == FRUITJAM
+  #define LED_PIN LED_BUILTIN // Fruit Jam onboard LED
+#else
+  #define LED_PIN 16 // dinkii LED1
+#endif
 #define LED_PIN2 18 // dinkii LED2
 
 
