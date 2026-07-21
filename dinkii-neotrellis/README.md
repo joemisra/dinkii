@@ -50,13 +50,46 @@ For general programming using Arduino see the [Adafruit Guide for RP2040](https:
 The repo includes a PlatformIO configuration file and should work out of the box with VSCode.  
 
 Two build environments are available:
-- **`env:pico`** – for dink-ii and other RP2040 boards (default)
-- **`env:fruitjam`** – for the Adafruit Fruit Jam (RP2350)
+- **`env:pico`** – for dink-ii and other RP2040 boards
+- **`env:fruitjam`** – for the Adafruit Fruit Jam (RP2350, default)
 
 To build for the Fruit Jam, select the `env:fruitjam` environment in PlatformIO, or build from the command line:
 ```
 pio run -e fruitjam
 ```
+
+To build and upload to a connected Fruit Jam after the maintenance command has
+been installed once:
+```
+python3 tools/upload_fruitjam.py
+```
+
+### MechaTrellis RGB and 8-bit OSC extension
+
+The firmware supports private per-cell RGB, 8-bit level, 8-bit global
+intensity, and eight RAM-backed color-preset slots while retaining all standard monome LED commands. These
+commands require the matched serialosc build described in
+[`host/README.md`](host/README.md). The OSC paths and serial packet layouts are
+documented in [`docs/mechatrellis-osc.md`](docs/mechatrellis-osc.md).
+
+The helper stops `serialosc`, asks the running firmware to enter Picoboot-only
+mode, uploads the production build, and restarts `serialosc`. Picoboot-only mode
+does not expose the `RP2350` mass-storage drive, preventing media and MIDI
+software from claiming it during upload. The first installation still requires
+entering BOOTSEL manually:
+```
+python3 tools/upload_fruitjam.py --manual
+```
+
+For a 16x16 panel reachability test, use the diagnostic environment:
+```
+pio run -e fruitjam-panel-test -t upload
+pio device monitor -b 115200
+```
+
+It reports every configured panel address every three seconds, lights all LEDs
+dim blue, and turns a key bright green while it is pressed. Stop `serialosc`
+temporarily if it claims the diagnostic serial port.
 
 You may need to install some items if you've never used PlatformIO.  
 

@@ -7,7 +7,9 @@ const int INFO = 1;
 const int WARN = 2;
 const int ERROR = 3;
 
-const int DEBUG_LEVEL = INFO;
+// The USB CDC stream carries binary mext data in production. Text logging on
+// that stream corrupts serialosc packets, so keep it disabled by default.
+const int DEBUG_LEVEL = ERROR + 1;
 
 void debug(int level, const char *message);
 void debug(int level, String message);

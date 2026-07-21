@@ -1,5 +1,23 @@
 #include "MonomeSerialDevice.h"
 #include "debug.h"
+#include <pico/bootrom.h>
+#include <string.h>
+
+namespace {
+constexpr uint8_t BOOTLOADER_COMMAND = 0xF0;
+constexpr uint8_t BOOTLOADER_MAGIC[4] = {'B', 'O', 'O', 'T'};
+
+// Private MechaTrellis extension. Subsystem 0xA is unused by mext 1.x.
+constexpr uint8_t MECHATRELLIS_RGB_SET = 0xA0;
+constexpr uint8_t MECHATRELLIS_RGB_ALL = 0xA1;
+constexpr uint8_t MECHATRELLIS_LEVEL8_SET = 0xA2;
+constexpr uint8_t MECHATRELLIS_LEVEL8_ALL = 0xA3;
+constexpr uint8_t MECHATRELLIS_INTENSITY8 = 0xA4;
+constexpr uint8_t MECHATRELLIS_COLOR_SET = 0xA5;
+constexpr uint8_t MECHATRELLIS_COLOR_ALL = 0xA6;
+constexpr uint8_t MECHATRELLIS_COLOR_PRESET_STORE = 0xA7;
+constexpr uint8_t MECHATRELLIS_COLOR_PRESET_RECALL = 0xA8;
+}
 
 MonomeSerialDevice::MonomeSerialDevice() {}
 
@@ -10,8 +28,19 @@ void MonomeSerialDevice::initialize() {
     rows = 0;
     columns = 0;
     encoders = 0;
-    //clearQueue();
-    clearAllLeds();
+    gridIntensity = 255;
+    // Start with a white base color. Grid firmware can replace it with its
+    // configured legacy color after setupAsGrid() establishes the dimensions.
+    for (int i = 0; i < MAXLEDCOUNT; i++) {
+      leds[i] = 0;
+      gridLedModes[i] = GRID_LED_LEVEL4;
+      gridRed[i] = 255;
+      gridGreen[i] = 255;
+      gridBlue[i] = 255;
+    }
+    for (uint8_t slot = 0; slot < COLOR_PRESET_COUNT; slot++) {
+      gridColorPresetValid[slot] = false;
+    }
     arcDirty = false;
     gridDirty = false;
 }
@@ -43,17 +72,79 @@ void MonomeSerialDevice::getDeviceInfo() {
  }
 
 void MonomeSerialDevice::poll() {
-    //while (isMonome && Serial.available()) { processSerial(); };
-    if (Serial.available()) {
+    // Drain complete packets in batches. Waiting until the full packet has
+    // arrived prevents Serial.read() from returning -1 midway through a
+    // command, while batching keeps 16x16 frame updates from backing up.
+    uint8_t processed = 0;
+    while (Serial.available() && processed < 32) {
+      const uint8_t identifier = Serial.peek();
+      if (Serial.available() < packetLength(identifier)) {
+        break;
+      }
       processSerial();
-      // Serial.flush();
+      processed++;
     }
-    //Serial.println("processSerial");
+}
+
+uint8_t MonomeSerialDevice::packetLength(uint8_t identifier) {
+    switch (identifier) {
+        case 0x00: return 1;
+        case 0x01: return 1;
+        case 0x02: return 33;
+        case 0x03: return 1;
+        case 0x04: return 4;
+        case 0x05: return 1;
+        case 0x06: return 3;
+        case 0x07: return 1;
+        case 0x08: return 3;
+        case 0x0F: return 1;
+        case 0x10: return 3;
+        case 0x11: return 3;
+        case 0x12: return 1;
+        case 0x13: return 1;
+        case 0x14: return 11;
+        case 0x15: return 4;
+        case 0x16: return 4;
+        case 0x17: return 2;
+        case 0x18: return 4;
+        case 0x19: return 2;
+        case 0x1A: return 35;
+        case 0x1B: return 7;
+        case 0x1C: return 7;
+        case 0x20: return 3;
+        case 0x21: return 3;
+        case 0x50: return 3;
+        case 0x51: return 2;
+        case 0x52: return 2;
+        case 0x80: return 2;
+        case 0x81: return 2;
+        case 0x82: return 2;
+        case 0x90: return 4;
+        case 0x91: return 3;
+        case 0x92: return 34;
+        case 0x93: return 5;
+        case MECHATRELLIS_RGB_SET: return 6;
+        case MECHATRELLIS_RGB_ALL: return 4;
+        case MECHATRELLIS_LEVEL8_SET: return 4;
+        case MECHATRELLIS_LEVEL8_ALL: return 2;
+        case MECHATRELLIS_INTENSITY8: return 2;
+        case MECHATRELLIS_COLOR_SET: return 6;
+        case MECHATRELLIS_COLOR_ALL: return 4;
+        case MECHATRELLIS_COLOR_PRESET_STORE: return 2;
+        case MECHATRELLIS_COLOR_PRESET_RECALL: return 2;
+        case BOOTLOADER_COMMAND: return 5;
+        default: return 1;
+    }
 }
 
 
 void MonomeSerialDevice::setAllLEDs(int value) {
-  for (int i = 0; i < MAXLEDCOUNT; i++) leds[i] = value;
+  if (value < 0) value = 0;
+  if (value > 15) value = 15;
+  for (int i = 0; i < MAXLEDCOUNT; i++) {
+    leds[i] = value;
+    gridLedModes[i] = GRID_LED_LEVEL4;
+  }
 }
 
 void MonomeSerialDevice::setGridLed(uint8_t x, uint8_t y, uint8_t level) {
@@ -62,9 +153,85 @@ void MonomeSerialDevice::setGridLed(uint8_t x, uint8_t y, uint8_t level) {
 
     if (x < columns && y < rows) {
       uint32_t index = y * columns + x;
-      leds[index] = level;
+      leds[index] = level > 15 ? 15 : level;
+      gridLedModes[index] = GRID_LED_LEVEL4;
     }
     //debugfln(INFO, "LED index: %d x %d y %d", index, x, y);
+}
+
+void MonomeSerialDevice::setGridLedLevel8(uint8_t x, uint8_t y,
+                                           uint8_t level) {
+    if (x < columns && y < rows) {
+      const uint32_t index = y * columns + x;
+      leds[index] = level;
+      gridLedModes[index] = GRID_LED_LEVEL8;
+    }
+}
+
+void MonomeSerialDevice::setGridLedRgb(uint8_t x, uint8_t y, uint8_t red,
+                                      uint8_t green, uint8_t blue) {
+    if (x < columns && y < rows) {
+      const uint32_t index = y * columns + x;
+      gridRed[index] = red;
+      gridGreen[index] = green;
+      gridBlue[index] = blue;
+      gridLedModes[index] = GRID_LED_RGB;
+    }
+}
+
+void MonomeSerialDevice::setGridBaseColor(uint8_t x, uint8_t y, uint8_t red,
+                                          uint8_t green, uint8_t blue) {
+    if (x < columns && y < rows) {
+      const uint32_t index = y * columns + x;
+      gridRed[index] = red;
+      gridGreen[index] = green;
+      gridBlue[index] = blue;
+    }
+}
+
+void MonomeSerialDevice::setAllGridLevels8(uint8_t level) {
+    for (uint16_t i = 0; i < (uint16_t)rows * columns; i++) {
+      leds[i] = level;
+      gridLedModes[i] = GRID_LED_LEVEL8;
+    }
+}
+
+void MonomeSerialDevice::setAllGridRgb(uint8_t red, uint8_t green,
+                                      uint8_t blue) {
+    for (uint16_t i = 0; i < (uint16_t)rows * columns; i++) {
+      gridRed[i] = red;
+      gridGreen[i] = green;
+      gridBlue[i] = blue;
+      gridLedModes[i] = GRID_LED_RGB;
+    }
+}
+
+void MonomeSerialDevice::setAllGridBaseColors(uint8_t red, uint8_t green,
+                                              uint8_t blue) {
+    for (uint16_t i = 0; i < (uint16_t)rows * columns; i++) {
+      gridRed[i] = red;
+      gridGreen[i] = green;
+      gridBlue[i] = blue;
+    }
+}
+
+bool MonomeSerialDevice::storeGridColorPreset(uint8_t slot) {
+    if (slot >= COLOR_PRESET_COUNT) return false;
+    const size_t count = (size_t)rows * columns;
+    memcpy(gridColorPresetRed[slot], gridRed, count);
+    memcpy(gridColorPresetGreen[slot], gridGreen, count);
+    memcpy(gridColorPresetBlue[slot], gridBlue, count);
+    gridColorPresetValid[slot] = true;
+    return true;
+}
+
+bool MonomeSerialDevice::recallGridColorPreset(uint8_t slot) {
+    if (slot >= COLOR_PRESET_COUNT || !gridColorPresetValid[slot]) return false;
+    const size_t count = (size_t)rows * columns;
+    memcpy(gridRed, gridColorPresetRed[slot], count);
+    memcpy(gridGreen, gridColorPresetGreen[slot], count);
+    memcpy(gridBlue, gridColorPresetBlue[slot], count);
+    return true;
 }
         
 void MonomeSerialDevice::clearGridLed(uint8_t x, uint8_t y) {
@@ -84,7 +251,10 @@ void MonomeSerialDevice::clearArcLed(uint8_t enc, uint8_t led) {
 }
 
 void MonomeSerialDevice::clearAllLeds() {
-    for (int i = 0; i < MAXLEDCOUNT; i++) leds[i] = 0;
+    for (int i = 0; i < MAXLEDCOUNT; i++) {
+      leds[i] = 0;
+      gridLedModes[i] = GRID_LED_LEVEL4;
+    }
     //Serial.println("clearAllLeds");
 }
 
@@ -228,7 +398,7 @@ void MonomeSerialDevice::processSerial() {
     int8_t delta;
     uint8_t gridX    = columns;          // Will be either 8 or 16
     uint8_t gridY    = rows;
-    uint8_t numQuads = columns/rows;
+    uint8_t numQuads = ((columns + 7) / 8) * ((rows + 7) / 8);
     
     // get command identifier: first byte of packet is identifier in the form: [(a << 4) + b]
     // a = section (ie. system, key-grid, digital, encoder, led grid, tilt)
@@ -237,6 +407,85 @@ void MonomeSerialDevice::processSerial() {
     identifierSent = Serial.read();  
     
     switch (identifierSent) {
+        case BOOTLOADER_COMMAND: {
+            bool magicMatches = true;
+            for (uint8_t expected : BOOTLOADER_MAGIC) {
+                magicMatches &= Serial.read() == expected;
+            }
+
+            if (magicMatches) {
+                Serial.flush();
+                delay(20);
+                // Keep only the Picoboot vendor interface. Disabling USB mass
+                // storage prevents media and MIDI scanners from claiming the
+                // bootloader before picotool can upload.
+                reset_usb_boot(0, 1);
+            }
+            break;
+        }
+
+        case MECHATRELLIS_RGB_SET:
+          readX = Serial.read();
+          readY = Serial.read();
+          {
+            const uint8_t red = Serial.read();
+            const uint8_t green = Serial.read();
+            const uint8_t blue = Serial.read();
+            setGridLedRgb(readX, readY, red, green, blue);
+          }
+          break;
+
+        case MECHATRELLIS_RGB_ALL:
+          {
+            const uint8_t red = Serial.read();
+            const uint8_t green = Serial.read();
+            const uint8_t blue = Serial.read();
+            setAllGridRgb(red, green, blue);
+          }
+          break;
+
+        case MECHATRELLIS_LEVEL8_SET:
+          readX = Serial.read();
+          readY = Serial.read();
+          setGridLedLevel8(readX, readY, Serial.read());
+          break;
+
+        case MECHATRELLIS_LEVEL8_ALL:
+          setAllGridLevels8(Serial.read());
+          break;
+
+        case MECHATRELLIS_INTENSITY8:
+          gridIntensity = Serial.read();
+          break;
+
+        case MECHATRELLIS_COLOR_SET:
+          readX = Serial.read();
+          readY = Serial.read();
+          {
+            const uint8_t red = Serial.read();
+            const uint8_t green = Serial.read();
+            const uint8_t blue = Serial.read();
+            setGridBaseColor(readX, readY, red, green, blue);
+          }
+          break;
+
+        case MECHATRELLIS_COLOR_ALL:
+          {
+            const uint8_t red = Serial.read();
+            const uint8_t green = Serial.read();
+            const uint8_t blue = Serial.read();
+            setAllGridBaseColors(red, green, blue);
+          }
+          break;
+
+        case MECHATRELLIS_COLOR_PRESET_STORE:
+          storeGridColorPreset(Serial.read());
+          break;
+
+        case MECHATRELLIS_COLOR_PRESET_RECALL:
+          recallGridColorPreset(Serial.read());
+          break;
+
         case 0x00:  // device information
         	// [null, "led-grid", "key-grid", "digital-out", "digital-in", "encoder", "analog-in", "analog-out", "tilt", "led-ring"]
             //Serial.println("0x00 system / query ----------------------");
@@ -396,8 +645,7 @@ void MonomeSerialDevice::processSerial() {
 
         case 0x17:                                     //  /prefix/led/intensity i
           intensity = Serial.read();                      // set brightness for entire grid
-          // this is probably not right
-          setAllLEDs(intensity);
+          gridIntensity = (intensity > 15 ? 15 : intensity) * 17;
 
           break;
 

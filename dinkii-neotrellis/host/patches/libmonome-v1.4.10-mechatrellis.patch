@@ -1,0 +1,371 @@
+diff --git a/public/monome.h b/public/monome.h
+index 98ac1a5..894d34b 100644
+--- a/public/monome.h
++++ b/public/monome.h
+@@ -127,6 +127,31 @@ int monome_led_level_row(monome_t *monome, unsigned int x_off,
+                          unsigned int y, size_t count, const uint8_t *data);
+ int monome_led_level_col(monome_t *monome, unsigned int x, unsigned int y_off,
+                          size_t count, const uint8_t *data);
++
++/**
++ * Private MechaTrellis 8-bit RGB/level extension.
++ *
++ * These calls return -1 for protocols which do not implement the extension.
++ */
++int monome_mechatrellis_rgb_set(monome_t *monome, unsigned int x,
++                                unsigned int y, unsigned int red,
++                                unsigned int green, unsigned int blue);
++int monome_mechatrellis_rgb_all(monome_t *monome, unsigned int red,
++                                unsigned int green, unsigned int blue);
++int monome_mechatrellis_level8_set(monome_t *monome, unsigned int x,
++                                   unsigned int y, unsigned int level);
++int monome_mechatrellis_level8_all(monome_t *monome, unsigned int level);
++int monome_mechatrellis_intensity8(monome_t *monome,
++                                   unsigned int intensity);
++int monome_mechatrellis_color_set(monome_t *monome, unsigned int x,
++                                  unsigned int y, unsigned int red,
++                                  unsigned int green, unsigned int blue);
++int monome_mechatrellis_color_all(monome_t *monome, unsigned int red,
++                                  unsigned int green, unsigned int blue);
++int monome_mechatrellis_color_preset_store(monome_t *monome,
++                                           unsigned int slot);
++int monome_mechatrellis_color_preset_recall(monome_t *monome,
++                                            unsigned int slot);
+ int monome_event_get_grid(const monome_event_t *e,
+ 			  unsigned int *out_x, unsigned int *out_y,
+ 			  monome_t **monome);
+diff --git a/src/libmonome.c b/src/libmonome.c
+index 1dac5c7..ef94851 100644
+--- a/src/libmonome.c
++++ b/src/libmonome.c
+@@ -289,6 +289,56 @@ int monome_led_level_col(monome_t *monome, uint_t x, uint_t y_off,
+ 	return monome->led_level->col(monome, x, y_off, count, data);
+ }
+ 
++int monome_mechatrellis_rgb_set(monome_t *monome, uint_t x, uint_t y,
++                                uint_t red, uint_t green, uint_t blue) {
++	REQUIRE(mechatrellis);
++	return monome->mechatrellis->rgb_set(monome, x, y, red, green, blue);
++}
++
++int monome_mechatrellis_rgb_all(monome_t *monome, uint_t red, uint_t green,
++                                uint_t blue) {
++	REQUIRE(mechatrellis);
++	return monome->mechatrellis->rgb_all(monome, red, green, blue);
++}
++
++int monome_mechatrellis_level8_set(monome_t *monome, uint_t x, uint_t y,
++                                   uint_t level) {
++	REQUIRE(mechatrellis);
++	return monome->mechatrellis->level8_set(monome, x, y, level);
++}
++
++int monome_mechatrellis_level8_all(monome_t *monome, uint_t level) {
++	REQUIRE(mechatrellis);
++	return monome->mechatrellis->level8_all(monome, level);
++}
++
++int monome_mechatrellis_intensity8(monome_t *monome, uint_t intensity) {
++	REQUIRE(mechatrellis);
++	return monome->mechatrellis->intensity8(monome, intensity);
++}
++
++int monome_mechatrellis_color_set(monome_t *monome, uint_t x, uint_t y,
++                                  uint_t red, uint_t green, uint_t blue) {
++	REQUIRE(mechatrellis);
++	return monome->mechatrellis->color_set(monome, x, y, red, green, blue);
++}
++
++int monome_mechatrellis_color_all(monome_t *monome, uint_t red, uint_t green,
++                                  uint_t blue) {
++	REQUIRE(mechatrellis);
++	return monome->mechatrellis->color_all(monome, red, green, blue);
++}
++
++int monome_mechatrellis_color_preset_store(monome_t *monome, uint_t slot) {
++	REQUIRE(mechatrellis);
++	return monome->mechatrellis->color_preset_store(monome, slot);
++}
++
++int monome_mechatrellis_color_preset_recall(monome_t *monome, uint_t slot) {
++	REQUIRE(mechatrellis);
++	return monome->mechatrellis->color_preset_recall(monome, slot);
++}
++
+ int monome_event_get_grid(const monome_event_t *e, unsigned int *out_x, unsigned int *out_y, monome_t **monome) {
+ 	*out_x = e->grid.x;
+ 	*out_y = e->grid.y;
+diff --git a/src/private/internal.h b/src/private/internal.h
+index be0e6b8..c876a9b 100644
+--- a/src/private/internal.h
++++ b/src/private/internal.h
+@@ -38,6 +38,7 @@ typedef struct monome_devmap monome_devmap_t;
+ 
+ typedef struct monome_led_functions monome_led_functions_t;
+ typedef struct monome_led_level_functions monome_led_level_functions_t;
++typedef struct monome_mechatrellis_functions monome_mechatrellis_functions_t;
+ typedef struct monome_led_ring_functions monome_led_ring_functions_t;
+ typedef struct monome_tilt_functions monome_tilt_functions_t;
+ 
+@@ -103,6 +104,20 @@ struct monome_led_level_functions {
+ 	           size_t count, const uint8_t *data);
+ };
+ 
++struct monome_mechatrellis_functions {
++	int (*rgb_set)(monome_t *monome, uint_t x, uint_t y, uint_t red,
++	               uint_t green, uint_t blue);
++	int (*rgb_all)(monome_t *monome, uint_t red, uint_t green, uint_t blue);
++	int (*level8_set)(monome_t *monome, uint_t x, uint_t y, uint_t level);
++	int (*level8_all)(monome_t *monome, uint_t level);
++	int (*intensity8)(monome_t *monome, uint_t intensity);
++	int (*color_set)(monome_t *monome, uint_t x, uint_t y, uint_t red,
++	                 uint_t green, uint_t blue);
++	int (*color_all)(monome_t *monome, uint_t red, uint_t green, uint_t blue);
++	int (*color_preset_store)(monome_t *monome, uint_t slot);
++	int (*color_preset_recall)(monome_t *monome, uint_t slot);
++};
++
+ struct monome_led_ring_functions {
+ 	int (*set)(monome_t *monome, uint_t ring, uint_t led, uint_t level);
+ 	int (*all)(monome_t *monome, uint_t ring, uint_t level);
+@@ -143,6 +158,7 @@ struct monome {
+ 
+ 	monome_led_functions_t *led;
+ 	monome_led_level_functions_t *led_level;
++	monome_mechatrellis_functions_t *mechatrellis;
+ 	monome_led_ring_functions_t *led_ring;
+ 	monome_tilt_functions_t *tilt;
+ };
+diff --git a/src/proto/mext.c b/src/proto/mext.c
+index 21da2c7..231d998 100644
+--- a/src/proto/mext.c
++++ b/src/proto/mext.c
+@@ -309,6 +309,138 @@ static monome_led_level_functions_t mext_led_level_functions = {
+ 	.col = mext_led_level_col
+ };
+ 
++/**
++ * private MechaTrellis extension
++ */
++
++static int mext_mechatrellis_rgb_set(monome_t *monome, uint_t x, uint_t y,
++                                     uint_t red, uint_t green, uint_t blue) {
++	mext_msg_t msg = {
++		.addr = SS_MECHATRELLIS,
++		.cmd = CMD_MECHATRELLIS_RGB_SET
++	};
++
++	ROTATE_COORDS(monome, x, y);
++	msg.payload.mechatrellis_rgb_set.led.x = x;
++	msg.payload.mechatrellis_rgb_set.led.y = y;
++	msg.payload.mechatrellis_rgb_set.red = red;
++	msg.payload.mechatrellis_rgb_set.green = green;
++	msg.payload.mechatrellis_rgb_set.blue = blue;
++	return mext_write_msg(monome, &msg);
++}
++
++static int mext_mechatrellis_rgb_all(monome_t *monome, uint_t red,
++                                     uint_t green, uint_t blue) {
++	mext_msg_t msg = {
++		.addr = SS_MECHATRELLIS,
++		.cmd = CMD_MECHATRELLIS_RGB_ALL,
++		.payload = {
++			.mechatrellis_rgb_all = {
++				.red = red,
++				.green = green,
++				.blue = blue
++			}
++		}
++	};
++	return mext_write_msg(monome, &msg);
++}
++
++static int mext_mechatrellis_level8_set(monome_t *monome, uint_t x, uint_t y,
++                                        uint_t level) {
++	mext_msg_t msg = {
++		.addr = SS_MECHATRELLIS,
++		.cmd = CMD_MECHATRELLIS_LEVEL8_SET
++	};
++
++	ROTATE_COORDS(monome, x, y);
++	msg.payload.mechatrellis_level8_set.led.x = x;
++	msg.payload.mechatrellis_level8_set.led.y = y;
++	msg.payload.mechatrellis_level8_set.level = level;
++	return mext_write_msg(monome, &msg);
++}
++
++static int mext_mechatrellis_level8_all(monome_t *monome, uint_t level) {
++	mext_msg_t msg = {
++		.addr = SS_MECHATRELLIS,
++		.cmd = CMD_MECHATRELLIS_LEVEL8_ALL
++	};
++	msg.payload.mechatrellis_level8_all = level;
++	return mext_write_msg(monome, &msg);
++}
++
++static int mext_mechatrellis_intensity8(monome_t *monome, uint_t intensity) {
++	mext_msg_t msg = {
++		.addr = SS_MECHATRELLIS,
++		.cmd = CMD_MECHATRELLIS_INTENSITY8
++	};
++	msg.payload.mechatrellis_intensity8 = intensity;
++	return mext_write_msg(monome, &msg);
++}
++
++static int mext_mechatrellis_color_set(monome_t *monome, uint_t x, uint_t y,
++                                       uint_t red, uint_t green, uint_t blue) {
++	mext_msg_t msg = {
++		.addr = SS_MECHATRELLIS,
++		.cmd = CMD_MECHATRELLIS_COLOR_SET
++	};
++
++	ROTATE_COORDS(monome, x, y);
++	msg.payload.mechatrellis_rgb_set.led.x = x;
++	msg.payload.mechatrellis_rgb_set.led.y = y;
++	msg.payload.mechatrellis_rgb_set.red = red;
++	msg.payload.mechatrellis_rgb_set.green = green;
++	msg.payload.mechatrellis_rgb_set.blue = blue;
++	return mext_write_msg(monome, &msg);
++}
++
++static int mext_mechatrellis_color_all(monome_t *monome, uint_t red,
++                                       uint_t green, uint_t blue) {
++	mext_msg_t msg = {
++		.addr = SS_MECHATRELLIS,
++		.cmd = CMD_MECHATRELLIS_COLOR_ALL,
++		.payload = {
++			.mechatrellis_rgb_all = {
++				.red = red,
++				.green = green,
++				.blue = blue
++			}
++		}
++	};
++	return mext_write_msg(monome, &msg);
++}
++
++static int mext_mechatrellis_color_preset_store(monome_t *monome,
++                                                uint_t slot) {
++	mext_msg_t msg = {
++		.addr = SS_MECHATRELLIS,
++		.cmd = CMD_MECHATRELLIS_COLOR_PRESET_STORE
++	};
++	msg.payload.mechatrellis_color_preset_store = slot;
++	return mext_write_msg(monome, &msg);
++}
++
++static int mext_mechatrellis_color_preset_recall(monome_t *monome,
++                                                 uint_t slot) {
++	mext_msg_t msg = {
++		.addr = SS_MECHATRELLIS,
++		.cmd = CMD_MECHATRELLIS_COLOR_PRESET_RECALL
++	};
++	msg.payload.mechatrellis_color_preset_recall = slot;
++	return mext_write_msg(monome, &msg);
++}
++
++static monome_mechatrellis_functions_t mext_mechatrellis_functions = {
++	.rgb_set = mext_mechatrellis_rgb_set,
++	.rgb_all = mext_mechatrellis_rgb_all,
++	.level8_set = mext_mechatrellis_level8_set,
++	.level8_all = mext_mechatrellis_level8_all,
++	.intensity8 = mext_mechatrellis_intensity8,
++	.color_set = mext_mechatrellis_color_set,
++	.color_all = mext_mechatrellis_color_all,
++	.color_preset_store = mext_mechatrellis_color_preset_store,
++	.color_preset_recall = mext_mechatrellis_color_preset_recall
++};
++
+ /**
+  * led ring functions
+  */
+@@ -589,6 +721,8 @@ static int mext_open(monome_t *monome, const char *dev, const char *serial,
+ 	SELF_FROM(monome);
+ 	monome_event_t e;
+ 
++	monome->mechatrellis = &mext_mechatrellis_functions;
++
+ 	if( monome_platform_open(monome, m, dev) )
+ 		return -1;
+ 
+diff --git a/src/proto/mext.h b/src/proto/mext.h
+index b232205..16951c3 100644
+--- a/src/proto/mext.h
++++ b/src/proto/mext.h
+@@ -35,7 +35,8 @@ typedef enum {
+ 	SS_ANALOG_IN   = 6,
+ 	SS_ANALOG_OUT  = 7,
+ 	SS_TILT        = 8,
+-	SS_LED_RING    = 9
++	SS_LED_RING    = 9,
++	SS_MECHATRELLIS = 10
+ } mext_subsystem_t;
+ 
+ typedef enum {
+@@ -74,6 +75,17 @@ typedef enum {
+ 	CMD_LED_LEVEL_ROW    = 0xB,
+ 	CMD_LED_LEVEL_COLUMN = 0xC,
+ 
++	/* private MechaTrellis extension (subsystem 0xA) */
++	CMD_MECHATRELLIS_RGB_SET    = 0x0,
++	CMD_MECHATRELLIS_RGB_ALL    = 0x1,
++	CMD_MECHATRELLIS_LEVEL8_SET = 0x2,
++	CMD_MECHATRELLIS_LEVEL8_ALL = 0x3,
++	CMD_MECHATRELLIS_INTENSITY8 = 0x4,
++	CMD_MECHATRELLIS_COLOR_SET  = 0x5,
++	CMD_MECHATRELLIS_COLOR_ALL  = 0x6,
++	CMD_MECHATRELLIS_COLOR_PRESET_STORE = 0x7,
++	CMD_MECHATRELLIS_COLOR_PRESET_RECALL = 0x8,
++
+ 	/* incoming */
+ 	CMD_KEY_UP   = 0x0,
+ 	CMD_KEY_DOWN = 0x1,
+@@ -141,6 +153,18 @@ static size_t outgoing_payload_lengths[16][16] = {
+ 		[CMD_LED_RING_INTENSITY] = 2
+ 	},
+ 
++	[SS_MECHATRELLIS] = {
++		[CMD_MECHATRELLIS_RGB_SET]    = 5,
++		[CMD_MECHATRELLIS_RGB_ALL]    = 3,
++		[CMD_MECHATRELLIS_LEVEL8_SET] = 3,
++		[CMD_MECHATRELLIS_LEVEL8_ALL] = 1,
++		[CMD_MECHATRELLIS_INTENSITY8] = 1,
++		[CMD_MECHATRELLIS_COLOR_SET]  = 5,
++		[CMD_MECHATRELLIS_COLOR_ALL]  = 3,
++		[CMD_MECHATRELLIS_COLOR_PRESET_STORE] = 1,
++		[CMD_MECHATRELLIS_COLOR_PRESET_RECALL] = 1
++	},
++
+ 	[SS_TILT] = {
+ 		[CMD_TILT_STATE_REQ] = 0,
+ 		[CMD_TILT_ENABLE]    = 1,
+@@ -264,6 +288,29 @@ struct mext_msg {
+ 			uint8_t levels[8];
+ 		} PACKED level_row_col;
+ 
++		struct {
++			mext_point_t led;
++			uint8_t red;
++			uint8_t green;
++			uint8_t blue;
++		} PACKED mechatrellis_rgb_set;
++
++		struct {
++			uint8_t red;
++			uint8_t green;
++			uint8_t blue;
++		} PACKED mechatrellis_rgb_all;
++
++		struct {
++			mext_point_t led;
++			uint8_t level;
++		} PACKED mechatrellis_level8_set;
++
++		uint8_t mechatrellis_level8_all;
++		uint8_t mechatrellis_intensity8;
++		uint8_t mechatrellis_color_preset_store;
++		uint8_t mechatrellis_color_preset_recall;
++
+ 		/**
+ 		 * key grid
+ 		 */
