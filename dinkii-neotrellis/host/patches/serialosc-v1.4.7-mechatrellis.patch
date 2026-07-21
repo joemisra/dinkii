@@ -1,0 +1,143 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 1f2d4ce..42c14e4 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -19,7 +19,12 @@ add_subdirectory(third-party/confuse EXCLUDE_FROM_ALL)
+ 
+ message(STATUS "configuring libmonome")
+ 
+-add_subdirectory(third-party/libmonome EXCLUDE_FROM_ALL)
++if(MECHATRELLIS_LIBMONOME_DIR)
++    add_subdirectory(${MECHATRELLIS_LIBMONOME_DIR}
++        ${CMAKE_CURRENT_BINARY_DIR}/third-party/libmonome EXCLUDE_FROM_ALL)
++else()
++    add_subdirectory(third-party/libmonome EXCLUDE_FROM_ALL)
++endif()
+ 
+ message(STATUS "configuring liblo")
+ 
+diff --git a/src/serialosc-device/osc/mext_methods.c b/src/serialosc-device/osc/mext_methods.c
+index b62b68f..681040d 100644
+--- a/src/serialosc-device/osc/mext_methods.c
++++ b/src/serialosc-device/osc/mext_methods.c
+@@ -35,6 +35,16 @@ coerce_arg_to_int(lo_type type, lo_arg *src)
+ 	return 0;
+ }
+ 
++static unsigned int
++clamp_u8(int value)
++{
++	if (value < 0)
++		return 0;
++	if (value > 255)
++		return 255;
++	return value;
++}
++
+ OSC_HANDLER_FUNC(led_set_handler)
+ {
+ 	monome_t *monome = user_data;
+@@ -115,6 +125,69 @@ OSC_HANDLER_FUNC(led_level_all_handler)
+ 	return monome_led_level_all(monome, argv[0]->i);
+ }
+ 
++OSC_HANDLER_FUNC(mechatrellis_rgb_set_handler)
++{
++	monome_t *monome = user_data;
++	return monome_mechatrellis_rgb_set(
++		monome, argv[0]->i, argv[1]->i, clamp_u8(argv[2]->i),
++		clamp_u8(argv[3]->i), clamp_u8(argv[4]->i));
++}
++
++OSC_HANDLER_FUNC(mechatrellis_rgb_all_handler)
++{
++	monome_t *monome = user_data;
++	return monome_mechatrellis_rgb_all(
++		monome, clamp_u8(argv[0]->i), clamp_u8(argv[1]->i),
++		clamp_u8(argv[2]->i));
++}
++
++OSC_HANDLER_FUNC(mechatrellis_level8_set_handler)
++{
++	monome_t *monome = user_data;
++	return monome_mechatrellis_level8_set(
++		monome, argv[0]->i, argv[1]->i, clamp_u8(argv[2]->i));
++}
++
++OSC_HANDLER_FUNC(mechatrellis_level8_all_handler)
++{
++	monome_t *monome = user_data;
++	return monome_mechatrellis_level8_all(monome, clamp_u8(argv[0]->i));
++}
++
++OSC_HANDLER_FUNC(mechatrellis_intensity8_handler)
++{
++	monome_t *monome = user_data;
++	return monome_mechatrellis_intensity8(monome, clamp_u8(argv[0]->i));
++}
++
++OSC_HANDLER_FUNC(mechatrellis_color_set_handler)
++{
++	monome_t *monome = user_data;
++	return monome_mechatrellis_color_set(
++		monome, argv[0]->i, argv[1]->i, clamp_u8(argv[2]->i),
++		clamp_u8(argv[3]->i), clamp_u8(argv[4]->i));
++}
++
++OSC_HANDLER_FUNC(mechatrellis_color_all_handler)
++{
++	monome_t *monome = user_data;
++	return monome_mechatrellis_color_all(
++		monome, clamp_u8(argv[0]->i), clamp_u8(argv[1]->i),
++		clamp_u8(argv[2]->i));
++}
++
++OSC_HANDLER_FUNC(mechatrellis_color_preset_store_handler)
++{
++	monome_t *monome = user_data;
++	return monome_mechatrellis_color_preset_store(monome, clamp_u8(argv[0]->i));
++}
++
++OSC_HANDLER_FUNC(mechatrellis_color_preset_recall_handler)
++{
++	monome_t *monome = user_data;
++	return monome_mechatrellis_color_preset_recall(monome, clamp_u8(argv[0]->i));
++}
++
+ OSC_HANDLER_FUNC(led_level_map_handler)
+ {
+ 	monome_t *monome = user_data;
+@@ -271,6 +344,33 @@ osc_register_methods(sosc_state_t *state)
+ 	METHOD("grid/led/level/row")
+ 		REGISTER(NULL, led_level_row_handler);
+ 
++	METHOD("grid/led/rgb/set")
++		REGISTER("iiiii", mechatrellis_rgb_set_handler);
++
++	METHOD("grid/led/rgb/all")
++		REGISTER("iii", mechatrellis_rgb_all_handler);
++
++	METHOD("grid/led/level8/set")
++		REGISTER("iii", mechatrellis_level8_set_handler);
++
++	METHOD("grid/led/level8/all")
++		REGISTER("i", mechatrellis_level8_all_handler);
++
++	METHOD("grid/led/intensity8")
++		REGISTER("i", mechatrellis_intensity8_handler);
++
++	METHOD("grid/led/color/set")
++		REGISTER("iiiii", mechatrellis_color_set_handler);
++
++	METHOD("grid/led/color/all")
++		REGISTER("iii", mechatrellis_color_all_handler);
++
++	METHOD("grid/led/color/preset/store")
++		REGISTER("i", mechatrellis_color_preset_store_handler);
++
++	METHOD("grid/led/color/preset/recall")
++		REGISTER("i", mechatrellis_color_preset_recall_handler);
++
+ 	METHOD("ring/set")
+ 		REGISTER("iii", led_ring_set_handler);
+ 

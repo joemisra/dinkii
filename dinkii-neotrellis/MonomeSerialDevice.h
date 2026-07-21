@@ -57,6 +57,12 @@ class MonomeEventQueue {
 
 class MonomeSerialDevice : public MonomeEventQueue {
     public: 
+        enum GridLedMode : uint8_t {
+            GRID_LED_LEVEL4 = 0,
+            GRID_LED_LEVEL8 = 1,
+            GRID_LED_RGB = 2
+        };
+
         MonomeSerialDevice();
         void initialize();
         void setupAsGrid(uint8_t _rows, uint8_t _columns);
@@ -66,6 +72,16 @@ class MonomeSerialDevice : public MonomeEventQueue {
         void refresh();
 
         void setGridLed(uint8_t x, uint8_t y, uint8_t level);
+        void setGridLedLevel8(uint8_t x, uint8_t y, uint8_t level);
+        void setGridLedRgb(uint8_t x, uint8_t y, uint8_t red,
+                           uint8_t green, uint8_t blue);
+        void setGridBaseColor(uint8_t x, uint8_t y, uint8_t red,
+                              uint8_t green, uint8_t blue);
+        void setAllGridLevels8(uint8_t level);
+        void setAllGridRgb(uint8_t red, uint8_t green, uint8_t blue);
+        void setAllGridBaseColors(uint8_t red, uint8_t green, uint8_t blue);
+        bool storeGridColorPreset(uint8_t slot);
+        bool recallGridColorPreset(uint8_t slot);
         void clearGridLed(uint8_t x, uint8_t y);
         void setArcLed(uint8_t enc, uint8_t led, uint8_t level);
         void setAllLEDs(int value);
@@ -84,17 +100,27 @@ class MonomeSerialDevice : public MonomeEventQueue {
         uint8_t rows;
         uint8_t columns;
         uint8_t encoders;
+        uint8_t gridIntensity;
         uint8_t gridX;
         uint8_t gridY;
 
         static const int variMonoThresh = 0;
         static const int MAXLEDCOUNT = 256;
+        static const uint8_t COLOR_PRESET_COUNT = 8;
         uint8_t leds[MAXLEDCOUNT];
+        uint8_t gridLedModes[MAXLEDCOUNT];
+        uint8_t gridRed[MAXLEDCOUNT];
+        uint8_t gridGreen[MAXLEDCOUNT];
+        uint8_t gridBlue[MAXLEDCOUNT];
         String deviceID;
         
     private : 
         bool arcDirty = false;
         bool gridDirty = false;
+        bool gridColorPresetValid[COLOR_PRESET_COUNT];
+        uint8_t gridColorPresetRed[COLOR_PRESET_COUNT][MAXLEDCOUNT];
+        uint8_t gridColorPresetGreen[COLOR_PRESET_COUNT][MAXLEDCOUNT];
+        uint8_t gridColorPresetBlue[COLOR_PRESET_COUNT][MAXLEDCOUNT];
 // 		uint8_t gridRotation;  // 0, 1, 2, or 3 for 0, 90, 180, 270 degrees
 // 		bool tiltActive[4] = {false, false, false, false};
 // 		int16_t lastTiltX[4] = {0};
@@ -102,6 +128,7 @@ class MonomeSerialDevice : public MonomeEventQueue {
 // 		int16_t lastTiltZ[4] = {0};
        
 //        MonomeSerialDevice();
+        uint8_t packetLength(uint8_t identifier);
         void processSerial();
 };
 
